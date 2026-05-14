@@ -384,21 +384,29 @@
     <!-- ★ 전염병 추가하려면 이 div 안에 disease-btn 블록을 복사해서 추가하세요 -->
     <div class="disease-grid" id="diseaseGrid">
 
-      <button class="disease-btn active" data-id="flu"
-        data-name="독감(인플루엔자)"
-        data-immunity-days="180"
-        data-avg-interval="365"
-        data-peak-risk="0.25">
+      <!-- A형/B형 독감 분리 -->
+      <button class="disease-btn active" data-id="fluA"
+        data-name="A형 독감"
+        data-beta="0.28" data-sigma="0.196" data-gamma="0.143"
+        data-immunity-days="180" data-wane-rate="0.008" data-peak-risk="0.28">
         <span class="d-icon">🤧</span>
-        <span class="d-name">독감</span>
-        <span class="d-sub">인플루엔자</span>
+        <span class="d-name">A형 독감</span>
+        <span class="d-sub">인플루엔자 A · 변이 잦음</span>
+      </button>
+
+      <button class="disease-btn" data-id="fluB"
+        data-name="B형 독감"
+        data-beta="0.20" data-sigma="0.167" data-gamma="0.125"
+        data-immunity-days="240" data-wane-rate="0.005" data-peak-risk="0.18">
+        <span class="d-icon">🤧</span>
+        <span class="d-name">B형 독감</span>
+        <span class="d-sub">인플루엔자 B · 안정적</span>
       </button>
 
       <button class="disease-btn" data-id="covid"
         data-name="코로나19"
-        data-immunity-days="120"
-        data-avg-interval="270"
-        data-peak-risk="0.35">
+        data-beta="0.35" data-sigma="0.200" data-gamma="0.100"
+        data-immunity-days="120" data-wane-rate="0.012" data-peak-risk="0.35">
         <span class="d-icon">🦠</span>
         <span class="d-name">코로나19</span>
         <span class="d-sub">COVID-19</span>
@@ -406,29 +414,26 @@
 
       <button class="disease-btn" data-id="noro"
         data-name="노로바이러스"
-        data-immunity-days="60"
-        data-avg-interval="200"
-        data-peak-risk="0.40">
+        data-beta="0.45" data-sigma="0.500" data-gamma="0.333"
+        data-immunity-days="60" data-wane-rate="0.020" data-peak-risk="0.42">
         <span class="d-icon">🌊</span>
         <span class="d-name">노로바이러스</span>
         <span class="d-sub">식중독·위장염</span>
       </button>
 
       <button class="disease-btn" data-id="rsv"
-        data-name="RSV(호흡기세포융합바이러스)"
-        data-immunity-days="90"
-        data-avg-interval="300"
-        data-peak-risk="0.30">
+        data-name="RSV"
+        data-beta="0.25" data-sigma="0.167" data-gamma="0.111"
+        data-immunity-days="90" data-wane-rate="0.015" data-peak-risk="0.30">
         <span class="d-icon">🫁</span>
         <span class="d-name">RSV</span>
-        <span class="d-sub">호흡기바이러스</span>
+        <span class="d-sub">호흡기세포융합바이러스</span>
       </button>
 
       <button class="disease-btn" data-id="cold"
         data-name="일반 감기"
-        data-immunity-days="30"
-        data-avg-interval="90"
-        data-peak-risk="0.55">
+        data-beta="0.50" data-sigma="0.333" data-gamma="0.250"
+        data-immunity-days="30" data-wane-rate="0.030" data-peak-risk="0.55">
         <span class="d-icon">🤒</span>
         <span class="d-name">일반 감기</span>
         <span class="d-sub">라이노바이러스</span>
@@ -436,9 +441,8 @@
 
       <button class="disease-btn" data-id="hpylori"
         data-name="장염"
-        data-immunity-days="45"
-        data-avg-interval="150"
-        data-peak-risk="0.45">
+        data-beta="0.40" data-sigma="0.400" data-gamma="0.286"
+        data-immunity-days="45" data-wane-rate="0.025" data-peak-risk="0.45">
         <span class="d-icon">🦠</span>
         <span class="d-name">장염</span>
         <span class="d-sub">로타·아데노바이러스</span>
@@ -540,14 +544,17 @@
 const WORKER_URL = 'https://soft-haze-575c.csw3040-5d2.workers.dev';
 
 let selectedDisease = {
-  id: 'flu',
-  name: '독감(인플루엔자)',
-  immunityDays: 180,
-  avgInterval: 365,
-  peakRisk: 0.25
+  id: 'fluA',
+  name: 'A형 독감',
+  beta: 0.28,        // 감염률 (contact rate × transmission prob)
+  sigma: 0.196,      // 잠복기 역수 (1/잠복기일수) — A형 독감: 약 5.1일
+  gamma: 0.143,      // 회복률 (1/감염기간) — A형 독감: 약 7일
+  immunityDays: 180, // 면역 지속 일수
+  waneRate: 0.008,   // 면역 소실 속도 (일당)
+  peakRisk: 0.28     // 최대 기저 감염률
 };
 let immunityChartInstance = null;
-let liveWeeklyRate = null; // 실시간 유행 데이터
+let liveWeeklyRate = null;
 
 
 /* ============================================================
@@ -613,8 +620,11 @@ document.getElementById('diseaseGrid').addEventListener('click', e => {
   selectedDisease = {
     id:           btn.dataset.id,
     name:         btn.dataset.name,
+    beta:         parseFloat(btn.dataset.beta),
+    sigma:        parseFloat(btn.dataset.sigma),
+    gamma:        parseFloat(btn.dataset.gamma),
     immunityDays: parseInt(btn.dataset.immunityDays),
-    avgInterval:  parseInt(btn.dataset.avgInterval),
+    waneRate:     parseFloat(btn.dataset.waneRate),
     peakRisk:     parseFloat(btn.dataset.peakRisk)
   };
 
@@ -641,58 +651,125 @@ function getValidDates() {
 
 
 /* ============================================================
+   ★ SEIR 수치 적분 함수: solveSEIR()
+   - 룽게-쿠타 4차(RK4) 방법으로 미분방정식을 수치적으로 풂
+   - dS/dt = -β·S·I/N + ω·R        (감수성자: 감염 - 면역소실)
+   - dE/dt =  β·S·I/N - σ·E        (잠복자: 노출 - 발병)
+   - dI/dt =  σ·E    - γ·I         (감염자: 발병 - 회복)
+   - dR/dt =  γ·I    - ω·R         (회복자: 회복 - 면역소실)
+   ω = waneRate (일당 면역 소실률)
+   ============================================================ */
+function solveSEIR(params, days) {
+  const { beta, sigma, gamma, waneRate } = params;
+  const N = 10000; // 가상 집단 크기
+  const dt = 0.5;  // 시간 간격 (0.5일)
+  const steps = Math.round(days / dt);
+
+  // 초기 상태: 감염 직후 → 회복자(R)로 시작
+  let S = N * 0.90;
+  let E = 0;
+  let I = N * 0.01;
+  let R = N * 0.09;
+
+  const result = [{ day: 0, S, E, I, R, immunity: (R / N) * 100 }];
+
+  // RK4 적분
+  for (let step = 1; step <= steps; step++) {
+    const rk = (s, e, i, r) => {
+      const dS = -beta * s * i / N + waneRate * r;
+      const dE =  beta * s * i / N - sigma * e;
+      const dI =  sigma * e         - gamma * i;
+      const dR =  gamma * i         - waneRate * r;
+      return { dS, dE, dI, dR };
+    };
+
+    const k1 = rk(S, E, I, R);
+    const k2 = rk(S + dt/2*k1.dS, E + dt/2*k1.dE, I + dt/2*k1.dI, R + dt/2*k1.dR);
+    const k3 = rk(S + dt/2*k2.dS, E + dt/2*k2.dE, I + dt/2*k2.dI, R + dt/2*k2.dR);
+    const k4 = rk(S + dt*k3.dS,   E + dt*k3.dE,   I + dt*k3.dI,   R + dt*k3.dR);
+
+    S += dt/6 * (k1.dS + 2*k2.dS + 2*k3.dS + k4.dS);
+    E += dt/6 * (k1.dE + 2*k2.dE + 2*k3.dE + k4.dE);
+    I += dt/6 * (k1.dI + 2*k2.dI + 2*k3.dI + k4.dI);
+    R += dt/6 * (k1.dR + 2*k2.dR + 2*k3.dR + k4.dR);
+
+    // 매 2일마다 저장
+    if (step % Math.round(2 / dt) === 0) {
+      result.push({
+        day: Math.round(step * dt),
+        S: Math.max(0, S),
+        E: Math.max(0, E),
+        I: Math.max(0, I),
+        R: Math.max(0, R),
+        immunity: Math.max(5, (R / N) * 100)
+      });
+    }
+  }
+  return result;
+}
+
+
+/* ============================================================
    ★ 핵심 계산 함수: calculateResults()
-   - 입력된 날짜 기반으로 면역력 지수와 감염 확률 계산
+   - SEIR 모델 기반으로 면역력 지수와 감염 확률 계산
    ============================================================ */
 function calculateResults(dates) {
   const now      = new Date();
-  const iDays    = selectedDisease.immunityDays;
   const peakRisk = selectedDisease.peakRisk;
-  const avgInt   = selectedDisease.avgInterval;
 
   // 날짜 없을 때 기본값
   if (dates.length === 0) {
     return {
-      immunityIndex: 30,           // %
-      riskPct:       peakRisk * 100,
+      immunityIndex: 30,
+      riskPct:       Math.round(peakRisk * 100),
       nextRiskDate:  null,
       daysSinceLast: null,
       totalCount:    0,
-      avgDaysBetween:null,
-      prediction:    '데이터 부족'
+      avgDaysBetween: null,
+      prediction:    '데이터 부족',
+      seirData:      null,
+      R0:            (selectedDisease.beta / selectedDisease.gamma).toFixed(2)
     };
   }
 
-  const lastDate       = dates[0];                          // 가장 최근 감염일
-  const daysSinceLast  = Math.round((now - lastDate) / 864e5); // 마지막 감염 후 경과일
+  const lastDate      = dates[0];
+  const daysSinceLast = Math.round((now - lastDate) / 864e5);
 
-  /* ── 면역력 곡선 (수식 설명) ──────────────────────────────
-     감염 직후 면역력이 빠르게 최고점(95%)에 도달하고
-     이후 지수 감소: immunity = 95 * exp(-k * daysSinceLast)
-     k = ln(2) / halfLife  (halfLife = immunityDays * 0.7)
-     면역이 완전히 소실되면 기저 수준(15%)으로 수렴
-  ─────────────────────────────────────────────────────── */
-  const halfLife   = iDays * 0.7;
-  const k          = Math.LN2 / halfLife;
-  const rawImmunity = 95 * Math.exp(-k * daysSinceLast);
-  const immunityIndex = Math.max(15, Math.round(rawImmunity));
+  /* ── SEIR 수치 적분 ─────────────────────────────────────
+     마지막 감염일부터 현재까지 SEIR 모델 실행
+     현재 시점의 R(회복/면역) 비율로 면역력 지수 계산
+  ──────────────────────────────────────────────────────── */
+  const totalDays = Math.max(daysSinceLast, selectedDisease.immunityDays * 2);
+  const seirData  = solveSEIR(selectedDisease, totalDays);
 
-  /* ── 감염 위험도 계산 ────────────────────────────────────
-     위험도 = peakRisk * (1 - 면역지수/100)^1.5
-     + 실시간 유행률 보정 (liveWeeklyRate 있을 때)
-  ─────────────────────────────────────────────────────── */
-  const riskFactor = Math.pow(1 - immunityIndex / 100, 1.5);
-  let riskPct      = peakRisk * 100 * riskFactor;
+  // 현재 시점 면역력 찾기
+  const currentPoint = seirData.reduce((prev, curr) =>
+    Math.abs(curr.day - daysSinceLast) < Math.abs(prev.day - daysSinceLast) ? curr : prev
+  );
+  const immunityIndex = Math.round(currentPoint.immunity);
 
-  // ★ 실시간 유행 데이터 반영: 유행률이 높을수록 위험도 추가
+  /* ── 기본 재생산지수 R0 계산 ─────────────────────────────
+     R0 = β / γ  (감염 1명이 평균 몇 명에게 전파하는가)
+     실효 재생산지수 Rt = R0 × (S/N)
+  ──────────────────────────────────────────────────────── */
+  const R0 = selectedDisease.beta / selectedDisease.gamma;
+  const Rt = R0 * (currentPoint.S / 10000);
+
+  /* ── 감염 위험도: Rt 기반 개인 위험도 ───────────────────
+     개인위험도 = peakRisk × (1 - 면역지수/100)^1.5 × Rt보정
+  ──────────────────────────────────────────────────────── */
+  const immuneFactor = Math.pow(1 - immunityIndex / 100, 1.5);
+  const rtFactor     = Math.min(2, Rt / R0); // Rt가 R0에 가까울수록 위험
+  let riskPct        = peakRisk * 100 * immuneFactor * (0.5 + 0.5 * rtFactor);
+
+  // 실시간 유행 데이터 반영
   if (liveWeeklyRate !== null) {
-    // weeklyRate(10만명당 발생)를 0~20% 범위로 정규화해서 가산
-    const liveBonus = Math.min(20, liveWeeklyRate / 5);
+    const liveBonus = Math.min(15, liveWeeklyRate / 6);
     riskPct += liveBonus;
   }
 
-  // 과거 감염 빈도 보정 (많이 걸릴수록 개인 위험도 +)
-  const freqBonus = Math.min(20, (dates.length - 1) * 4);
+  // 과거 감염 빈도 보정
+  const freqBonus = Math.min(15, (dates.length - 1) * 3);
   riskPct = Math.min(95, riskPct + freqBonus);
 
   /* ── 평균 감염 간격 ──────────────────────────────────── */
@@ -700,21 +777,21 @@ function calculateResults(dates) {
   if (dates.length >= 2) {
     let total = 0;
     for (let i = 0; i < dates.length - 1; i++) {
-      total += Math.abs(dates[i] - dates[i + 1]) / 864e5;
+      total += Math.abs(dates[i] - dates[i+1]) / 864e5;
     }
     avgDaysBetween = Math.round(total / (dates.length - 1));
   }
 
-  /* ── 다음 위험 시기 예측 ─────────────────────────────── */
-  const daysToRisk  = Math.max(0, iDays - daysSinceLast);
-  const nextRiskDate = new Date(now);
-  nextRiskDate.setDate(nextRiskDate.getDate() + daysToRisk);
+  /* ── 면역 임계선(40%) 도달 시점 예측 ────────────────── */
+  const thresholdPoint = seirData.find(p => p.day > daysSinceLast && p.immunity < 40);
+  const daysToRisk     = thresholdPoint ? thresholdPoint.day - daysSinceLast : selectedDisease.immunityDays;
+  const nextRiskDate   = new Date(now);
+  nextRiskDate.setDate(nextRiskDate.getDate() + Math.max(0, daysToRisk));
 
-  /* ── 예측 메시지 ──────────────────────────────────────── */
   let prediction;
-  if (daysToRisk <= 0) prediction = '현재 면역 보호 약화 — 주의 필요';
-  else if (daysToRisk < 30) prediction = `약 ${daysToRisk}일 후 면역 보호 감소 예상`;
-  else prediction = `${Math.round(daysToRisk / 30)}개월 후 면역 보호 감소 예상`;
+  if (daysToRisk <= 0)       prediction = '현재 면역 보호 약화 — 주의 필요';
+  else if (daysToRisk < 30)  prediction = `약 ${daysToRisk}일 후 면역 보호 40% 미만 예상`;
+  else                        prediction = `약 ${Math.round(daysToRisk/30)}개월 후 면역 보호 40% 미만 예상`;
 
   return {
     immunityIndex,
@@ -723,7 +800,10 @@ function calculateResults(dates) {
     daysSinceLast,
     totalCount:     dates.length,
     avgDaysBetween,
-    prediction
+    prediction,
+    seirData,
+    R0:             R0.toFixed(2),
+    Rt:             Rt.toFixed(2)
   };
 }
 
@@ -807,11 +887,21 @@ function renderStats(r, dates) {
       <div class="stat-sub">${dates.length ? fmtDate(dates[0]) + ' 이후' : '입력 없음'}</div>
     </div>
     <div class="stat-box ${r.nextRiskDate && r.nextRiskDate <= new Date() ? 'red' : 'green'}">
-      <div class="stat-label">면역 감소 예상일</div>
+      <div class="stat-label">면역 40% 미만 예상일</div>
       <div class="stat-value ${r.nextRiskDate && r.nextRiskDate <= new Date() ? 'red' : 'green'}" style="font-size:1rem;margin-top:4px;">
         ${r.nextRiskDate ? fmtDate(r.nextRiskDate) : '—'}
       </div>
       <div class="stat-sub">${r.prediction}</div>
+    </div>
+    <div class="stat-box ${parseFloat(r.R0) > 2 ? 'red' : parseFloat(r.R0) > 1.5 ? 'amber' : 'green'}">
+      <div class="stat-label">기본 재생산지수 R₀</div>
+      <div class="stat-value ${parseFloat(r.R0) > 2 ? 'red' : parseFloat(r.R0) > 1.5 ? 'amber' : 'green'}">${r.R0 ?? '—'}</div>
+      <div class="stat-sub">감염 1명 → 평균 ${r.R0}명 전파</div>
+    </div>
+    <div class="stat-box ${parseFloat(r.Rt) > 1 ? 'red' : 'green'}">
+      <div class="stat-label">실효 재생산지수 Rₜ</div>
+      <div class="stat-value ${parseFloat(r.Rt) > 1 ? 'red' : 'green'}">${r.Rt ?? '—'}</div>
+      <div class="stat-sub">${parseFloat(r.Rt) > 1 ? '현재 유행 확산 중' : '현재 유행 감소 중'}</div>
     </div>`;
 }
 
@@ -850,38 +940,26 @@ function renderRiskBar(r) {
 
 /* ============================================================
    ★ 면역력 그래프 렌더링: renderChart()
-   - Chart.js 라이브러리 활용
-   - x축: 마지막 감염 후 경과일, y축: 면역력 지수(%)
+   - SEIR 수치 적분 결과를 Chart.js로 시각화
+   - R(회복/면역) 곡선 + S(감수성) 곡선 + 현재 위치 표시
    ============================================================ */
 function renderChart(dates, result) {
-  const iDays    = selectedDisease.immunityDays;
-  const halfLife = iDays * 0.7;
-  const k        = Math.LN2 / halfLife;
-
-  // 그래프 데이터 포인트 생성 (0 ~ 2배 면역 지속일)
-  const maxDay   = iDays * 2;
-  const labels   = [];
-  const immunity = [];
-
-  for (let d = 0; d <= maxDay; d += Math.max(1, Math.round(maxDay / 100))) {
-    labels.push(d);
-    const val = Math.max(15, Math.round(95 * Math.exp(-k * d)));
-    immunity.push(val);
-  }
-
-  // 현재 위치 마커
-  const currentDay  = result.daysSinceLast ?? 0;
-  const currentImm  = result.immunityIndex;
-
-  // 기존 차트 제거
   if (immunityChartInstance) { immunityChartInstance.destroy(); }
+
+  const seirData = result.seirData;
+  if (!seirData) return;
+
+  const labels   = seirData.map(p => p.day);
+  const immunity = seirData.map(p => Math.round(p.immunity));
+  const suscept  = seirData.map(p => Math.round(p.S / 100)); // S/N × 100%
+  const currentDay = result.daysSinceLast ?? 0;
+  const currentImm = result.immunityIndex;
 
   const ctx = document.getElementById('immunityChart').getContext('2d');
 
-  // 그라데이션 배경
-  const gradient = ctx.createLinearGradient(0, 0, 0, 280);
-  gradient.addColorStop(0, 'rgba(26,115,232,.25)');
-  gradient.addColorStop(1, 'rgba(26,115,232,.02)');
+  const gradImmune = ctx.createLinearGradient(0, 0, 0, 280);
+  gradImmune.addColorStop(0, 'rgba(26,115,232,.3)');
+  gradImmune.addColorStop(1, 'rgba(26,115,232,.02)');
 
   immunityChartInstance = new Chart(ctx, {
     type: 'line',
@@ -889,37 +967,50 @@ function renderChart(dates, result) {
       labels,
       datasets: [
         {
-          label: '면역력 지수 (%)',
+          label: 'R — 면역력 지수 (%)',
           data: immunity,
           borderColor: '#1a73e8',
-          backgroundColor: gradient,
+          backgroundColor: gradImmune,
           borderWidth: 2.5,
           pointRadius: 0,
           fill: true,
-          tension: 0.4
+          tension: 0.4,
+          yAxisID: 'y'
         },
         {
-          // 위험 임계선 (40%)
-          label: '재감염 위험 임계선',
-          data: labels.map(() => 40),
+          label: 'S — 감수성 인구 비율 (%)',
+          data: suscept,
           borderColor: '#c62828',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: false,
+          tension: 0.4,
+          yAxisID: 'y'
+        },
+        {
+          label: '재감염 위험 임계선 (40%)',
+          data: labels.map(() => 40),
+          borderColor: '#e65100',
           borderWidth: 1.5,
           borderDash: [6, 4],
           pointRadius: 0,
           fill: false,
-          tension: 0
+          tension: 0,
+          yAxisID: 'y'
         },
         {
-          // 현재 위치 마커
           label: '현재 상태',
-          data: labels.map(d => (Math.abs(d - currentDay) < (maxDay / 100) * 1.5 ? currentImm : null)),
-          borderColor: '#e65100',
-          backgroundColor: '#e65100',
-          pointRadius: labels.map(d => (Math.abs(d - currentDay) < (maxDay / 100) * 1.5 ? 8 : 0)),
+          data: labels.map(d => Math.abs(d - currentDay) <= 2 ? currentImm : null),
+          borderColor: '#2e7d32',
+          backgroundColor: '#2e7d32',
+          pointRadius: labels.map(d => Math.abs(d - currentDay) <= 2 ? 9 : 0),
           pointStyle: 'circle',
           fill: false,
           showLine: false,
-          spanGaps: false
+          spanGaps: false,
+          yAxisID: 'y'
         }
       ]
     },
@@ -941,22 +1032,15 @@ function renderChart(dates, result) {
       },
       scales: {
         x: {
-          title: {
-            display: true, text: '감염 후 경과일 (일)',
-            font: { family: 'Noto Sans KR', size: 11 }, color: '#8a96a8'
-          },
+          title: { display: true, text: '감염 후 경과일 (일)', font: { family: 'Noto Sans KR', size: 11 }, color: '#8a96a8' },
           ticks: { font: { family: 'Noto Sans KR', size: 10 }, color: '#8a96a8',
-                   callback: v => labels[v] !== undefined && labels[v] % Math.round(iDays/3) < Math.max(1, Math.round(maxDay/100)) ? labels[v] + 'd' : '' },
+                   callback: (v, i) => labels[i] % 30 === 0 ? labels[i] + 'd' : '' },
           grid: { color: '#eef0f4' }
         },
         y: {
           min: 0, max: 100,
-          title: {
-            display: true, text: '면역력 지수 (%)',
-            font: { family: 'Noto Sans KR', size: 11 }, color: '#8a96a8'
-          },
-          ticks: { font: { family: 'Noto Sans KR', size: 10 }, color: '#8a96a8',
-                   callback: v => v + '%' },
+          title: { display: true, text: '비율 (%)', font: { family: 'Noto Sans KR', size: 11 }, color: '#8a96a8' },
+          ticks: { font: { family: 'Noto Sans KR', size: 10 }, color: '#8a96a8', callback: v => v + '%' },
           grid: { color: '#eef0f4' }
         }
       }
