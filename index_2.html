@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>면역력 트래커 — 감염 예측 시스템</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    /* ===== CSS 변수 (색상 · 간격 시스템) ===== */
+    :root {
+      --bg:          #f4f6f9;
+      --surface:     #ffffff;
+      --surface-2:   #f0f4f8;
+      --border:      #dde3ec;
+      --accent:      #1a73e8;
+      --accent-soft: #e8f0fe;
+      --accent-2:    #0d47a1;
+      --green:       #2e7d32;
+      --green-soft:  #e8f5e9;
+      --amber:       #e65100;
+      --amber-soft:  #fff3e0;
+      --red:         #c62828;
+      --red-soft:    #ffebee;
+      --text-1:      #1a1f2e;
+      --text-2:      #4a5568;
+      --text-3:      #8a96a8;
+      --radius:      14px;
+      --shadow-sm:   0 1px 4px rgba(0,0,0,.06);
+      --shadow-md:   0 4px 16px rgba(0,0,0,.09);
+      --shadow-lg:   0 8px 32px rgba(0,0,0,.12);
+      --font-body:   'Noto Sans KR', sans-serif;
+      --font-display:'DM Serif Display', serif;
+    }
+
+    /* ===== 리셋 & 기본 ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text-1);
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    /* ===== 헤더 ===== */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow-sm);
+    }
+    .header-icon {
+      width: 42px; height: 42px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      color: var(--text-1);
+      line-height: 1.2;
+    }
+    header p { font-size: .78rem; color: var(--text-3); margin-top: 2px; }
+    .header-badge {
+      margin-left: auto;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: .72rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    /* ===== 메인 레이아웃 ===== */
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 28px 16px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* ===== 카드 ===== */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 26px 28px;
+      box-shadow: var(--shadow-sm);
+      transition: box-shadow .2s;
+    }
+    .card:hover { box-shadow: var(--shadow-md); }
+    .card-title {
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title::before {
+      content: '';
+      display: block;
+      width: 3px; height: 14px;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    /* ===== 전염병 선택 ===== */
+    .disease-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+    }
+    .disease-btn {
+      border: 2px solid var(--border);
+      background: var(--surface);
+      border-radius: 10px;
+      padding: 12px 10px;
+      cursor: pointer;
+      text-align: center;
+      transition: all .18s ease;
+      font-family: var(--font-body);
+    }
+    .disease-btn .d-icon { font-size: 1.6rem; display: block; margin-bottom: 5px; }
+    .disease-btn .d-name { font-size: .82rem; font-weight: 600; color: var(--text-2); }
+    .disease-btn .d-sub  { font-size: .7rem; color: var(--text-3); margin-top: 2px; }
+    .disease-btn:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+    }
+    .disease-btn.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: 0 0 0 3px rgba(26,115,232,.15);
+    }
+    .disease-btn.active .d-name { color: var(--accent); }
+
+    /* ===== 날짜 입력 ===== */
+    .date-rows { display: flex; flex-direction: column; gap: 12px; }
+    .date-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      transition: all .2s;
+    }
+    .date-row.disabled { opacity: .45; }
+    .date-row-num {
+      width: 24px; height: 24px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-size: .72rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .date-row label { font-size: .82rem; font-weight: 500; color: var(--text-2); flex-shrink: 0; min-width: 72px; }
+    .date-row input[type="date"] {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: .85rem;
+      font-family: var(--font-body);
+      color: var(--text-1);
+      background: var(--surface);
+      transition: border-color .15s;
+      min-width: 0;
+    }
+    .date-row input[type="date"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(26,115,232,.12);
+    }
+    .date-row input[type="date"]:disabled { background: var(--surface-2); cursor: not-allowed; }
+    .forget-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: .78rem;
+      color: var(--text-3);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .forget-label input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+    /* ===== 분석 버튼 ===== */
+    .btn-analyze {
+      width: 100%;
+      padding: 16px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: .95rem;
+      font-weight: 700;
+      font-family: var(--font-body);
+      cursor: pointer;
+      letter-spacing: .03em;
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-analyze:hover { background: var(--accent-2); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .btn-analyze:active { transform: translateY(0); }
+
+    /* ===== 결과 패널 ===== */
+    #results { display: none; }
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-box::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 4px; height: 100%;
+      border-radius: 2px 0 0 2px;
+    }
+    .stat-box.blue::before  { background: var(--accent); }
+    .stat-box.green::before { background: var(--green); }
+    .stat-box.amber::before { background: var(--amber); }
+    .stat-box.red::before   { background: var(--red); }
+    .stat-label { font-size: .72rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; }
+    .stat-value { font-size: 1.55rem; font-weight: 700; margin: 4px 0 2px; line-height: 1.1; }
+    .stat-value.blue  { color: var(--accent); }
+    .stat-value.green { color: var(--green); }
+    .stat-value.amber { color: var(--amber); }
+    .stat-value.red   { color: var(--red); }
+    .stat-sub { font-size: .75rem; color: var(--text-3); }
+
+    /* ===== 위험도 바 ===== */
+    .risk-bar-wrap { margin: 18px 0 6px; }
+    .risk-bar-label { display: flex; justify-content: space-between; font-size: .78rem; color: var(--text-2); margin-bottom: 6px; font-weight: 500; }
+    .risk-bar-bg { height: 12px; background: var(--surface-2); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .risk-bar-fill {
+      height: 100%;
+      border-radius: 8px;
+      transition: width 1s ease;
+      width: 0;
+    }
+    .risk-msg {
+      margin-top: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 500;
+      line-height: 1.5;
+    }
+
+    /* ===== 차트 ===== */
+    .chart-wrap {
+      position: relative;
+      height: 280px;
+    }
+
+    /* ===== 면역 상태 타임라인 ===== */
+    .timeline { display: flex; flex-direction: column; gap: 0; margin-top: 4px; }
+    .tl-item {
+      display: flex;
+      gap: 14px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+      align-items: flex-start;
+    }
+    .tl-item:last-child { border-bottom: none; }
+    .tl-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .tl-dot.red    { background: var(--red); box-shadow: 0 0 0 3px var(--red-soft); }
+    .tl-dot.amber  { background: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+    .tl-dot.green  { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
+    .tl-dot.blue   { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .tl-date { font-size: .78rem; color: var(--text-3); flex-shrink: 0; min-width: 70px; margin-top: 1px; }
+    .tl-desc { font-size: .82rem; color: var(--text-2); line-height: 1.45; }
+    .tl-desc strong { color: var(--text-1); font-weight: 600; }
+
+    /* ===== 면역력 게이지 ===== */
+    .immunity-gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 8px 0; }
+    .gauge-svg { overflow: visible; }
+    .gauge-value { font-family: var(--font-display); font-size: 2.2rem; fill: var(--text-1); }
+    .gauge-label { font-size: .78rem; fill: var(--text-3); font-family: var(--font-body); }
+
+    /* ===== 의학 고지 ===== */
+    .disclaimer {
+      background: var(--amber-soft);
+      border: 1px solid #ffcc80;
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: .78rem;
+      color: #7f4e00;
+      line-height: 1.6;
+    }
+    .disclaimer strong { font-weight: 700; }
+
+    /* ===== 반응형 ===== */
+    @media (max-width: 600px) {
+      .card { padding: 20px 16px; }
+      .disease-grid { grid-template-columns: repeat(3, 1fr); }
+      .result-grid { grid-template-columns: 1fr 1fr; }
+      .date-row { flex-wrap: wrap; }
+      .date-row label { min-width: auto; }
+      header h1 { font-size: 1.1rem; }
+      .header-badge { display: none; }
+    }
+
+    /* ===== 애니메이션 ===== */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp .4s ease both; }
+    .fade-up-2 { animation: fadeUp .4s .1s ease both; }
+    .fade-up-3 { animation: fadeUp .4s .2s ease both; }
+
+    /* ===== 로딩 스피너 ===== */
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2.5px solid rgba(255,255,255,.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<!-- ===== 헤더 ===== -->
+<header>
+  <div class="header-icon">🏥</div>
+  <div>
+    <h1>면역력 트래커</h1>
+    <p>감염 이력 기반 면역력 분석 시스템</p>
+  </div>
+  <span class="header-badge">교육용 시뮬레이션</span>
+</header>
+
+<main>
+
+  <!-- ① 전염병 선택 카드 -->
+  <div class="card fade-up">
+    <div class="card-title">전염병 선택</div>
+    <!-- ★ 전염병 추가하려면 이 div 안에 disease-btn 블록을 복사해서 추가하세요 -->
+    <div class="disease-grid" id="diseaseGrid">
+
+      <button class="disease-btn active" data-id="flu"
+        data-name="독감(인플루엔자)"
+        data-immunity-days="180"
+        data-avg-interval="365"
+        data-peak-risk="0.25">
+        <span class="d-icon">🤧</span>
+        <span class="d-name">독감</span>
+        <span class="d-sub">인플루엔자</span>
+      </button>
+
+      <button class="disease-btn" data-id="covid"
+        data-name="코로나19"
+        data-immunity-days="120"
+        data-avg-interval="270"
+        data-peak-risk="0.35">
+        <span class="d-icon">🦠</span>
+        <span class="d-name">코로나19</span>
+        <span class="d-sub">COVID-19</span>
+      </button>
+
+      <button class="disease-btn" data-id="noro"
+        data-name="노로바이러스"
+        data-immunity-days="60"
+        data-avg-interval="200"
+        data-peak-risk="0.40">
+        <span class="d-icon">🌊</span>
+        <span class="d-name">노로바이러스</span>
+        <span class="d-sub">식중독·위장염</span>
+      </button>
+
+      <button class="disease-btn" data-id="rsv"
+        data-name="RSV(호흡기세포융합바이러스)"
+        data-immunity-days="90"
+        data-avg-interval="300"
+        data-peak-risk="0.30">
+        <span class="d-icon">🫁</span>
+        <span class="d-name">RSV</span>
+        <span class="d-sub">호흡기바이러스</span>
+      </button>
+
+      <button class="disease-btn" data-id="cold"
+        data-name="일반 감기"
+        data-immunity-days="30"
+        data-avg-interval="90"
+        data-peak-risk="0.55">
+        <span class="d-icon">🤒</span>
+        <span class="d-name">일반 감기</span>
+        <span class="d-sub">라이노바이러스</span>
+      </button>
+
+      <button class="disease-btn" data-id="hpylori"
+        data-name="장염"
+        data-immunity-days="45"
+        data-avg-interval="150"
+        data-peak-risk="0.45">
+        <span class="d-icon">🦠</span>
+        <span class="d-name">장염</span>
+        <span class="d-sub">로타·아데노바이러스</span>
+      </button>
+
+    </div>
+  </div>
+
+  <!-- ② 날짜 입력 카드 -->
+  <div class="card fade-up-2">
+    <div class="card-title">감염 날짜 입력 <span style="font-weight:400;font-size:.85em;color:var(--text-3);text-transform:none;letter-spacing:0;">(최근 순으로 최대 5회)</span></div>
+    <!-- ★ 날짜 입력 로직: dateRows에서 값 수집 → calculateResults()에서 처리 -->
+    <div class="date-rows" id="dateRows">
+      <!-- JS로 동적 생성 -->
+    </div>
+    <button class="btn-analyze" id="btnAnalyze" onclick="analyze()" style="margin-top:20px;">
+      <span>📊 면역력 분석하기</span>
+    </button>
+  </div>
+
+  <!-- ③ 결과 영역 -->
+  <div id="results">
+
+    <!-- 핵심 지표 -->
+    <div class="card fade-up">
+      <div class="card-title">분석 결과</div>
+      <div class="result-grid" id="statGrid"><!-- JS 삽입 --></div>
+
+      <!-- 위험도 바 -->
+      <div class="risk-bar-wrap">
+        <div class="risk-bar-label">
+          <span>현재 감염 위험도</span>
+          <span id="riskPct">—</span>
+        </div>
+        <div class="risk-bar-bg">
+          <div class="risk-bar-fill" id="riskBarFill"></div>
+        </div>
+      </div>
+      <div class="risk-msg" id="riskMsg"></div>
+    </div>
+
+    <!-- 면역력 그래프 카드 -->
+    <div class="card fade-up-2">
+      <div class="card-title">면역력 변화 그래프</div>
+      <div class="chart-wrap">
+        <!-- ★ Chart.js 캔버스: renderChart()에서 그래프 그림 -->
+        <canvas id="immunityChart"></canvas>
+      </div>
+      <p style="font-size:.72rem;color:var(--text-3);margin-top:10px;text-align:center;">
+        감염 후 면역력은 빠르게 상승 후 서서히 감소합니다. 점선은 재감염 위험 임계선(40%)입니다.
+      </p>
+    </div>
+
+    <!-- 타임라인 카드 -->
+    <div class="card fade-up-3">
+      <div class="card-title">면역 상태 타임라인</div>
+      <div class="timeline" id="timeline"><!-- JS 삽입 --></div>
+    </div>
+
+    <!-- 현재 면역력 게이지 카드 -->
+    <div class="card fade-up" style="text-align:center;">
+      <div class="card-title">현재 추정 면역력 수준</div>
+      <div class="immunity-gauge-wrap">
+        <svg class="gauge-svg" width="200" height="120" viewBox="0 0 200 120">
+          <defs>
+            <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%"   stop-color="#c62828"/>
+              <stop offset="50%"  stop-color="#e65100"/>
+              <stop offset="100%" stop-color="#2e7d32"/>
+            </linearGradient>
+          </defs>
+          <!-- 배경 호 -->
+          <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#e0e7ef" stroke-width="16" stroke-linecap="round"/>
+          <!-- 채워진 호 -->
+          <path id="gaugeFill" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGrad)" stroke-width="16" stroke-linecap="round"
+                stroke-dasharray="251.3" stroke-dashoffset="251.3" style="transition:stroke-dashoffset 1.2s ease;"/>
+          <!-- 값 텍스트 -->
+          <text x="100" y="94" text-anchor="middle" class="gauge-value" id="gaugeValue">—</text>
+          <text x="100" y="113" text-anchor="middle" class="gauge-label">현재 면역력 지수</text>
+        </svg>
+      </div>
+    </div>
+
+  </div><!-- /#results -->
+
+  <!-- 의학 고지 -->
+  <div class="disclaimer">
+    ⚠️ <strong>의학적 고지사항</strong>: 이 도구는 <strong>교육 및 참고 목적의 시뮬레이션</strong>입니다. 실제 면역력은 개인 건강 상태·백신 접종 여부·변이 바이러스 등 다양한 요인에 따라 달라집니다. 의학적 판단은 반드시 전문 의료인과 상담하십시오.
+  </div>
+
+</main>
+
+<script>
+/* ============================================================
+   ★ 전역 상태 변수
+   ============================================================ */
+
+// ★ Cloudflare Worker 주소 (여기만 바꾸면 됨)
+const WORKER_URL = 'https://soft-haze-575c.csw3040-5d2.workers.dev';
+
+let selectedDisease = {
+  id: 'flu',
+  name: '독감(인플루엔자)',
+  immunityDays: 180,
+  avgInterval: 365,
+  peakRisk: 0.25
+};
+let immunityChartInstance = null;
+let liveWeeklyRate = null; // 실시간 유행 데이터
+
+
+/* ============================================================
+   ★ 초기화: 날짜 입력 행 생성
+   ============================================================ */
+function buildDateRows() {
+  const container = document.getElementById('dateRows');
+  container.innerHTML = '';
+  for (let i = 1; i <= 5; i++) {
+    const row = document.createElement('div');
+    row.className = 'date-row';
+    row.id = `row${i}`;
+    row.innerHTML = `
+      <div class="date-row-num">${i}</div>
+      <label>${i}번째 감염</label>
+      <input type="date" id="date${i}" max="${today()}"
+             placeholder="날짜 선택" oninput="onDateChange()"/>
+      <label class="forget-label">
+        <input type="checkbox" id="forget${i}" onchange="toggleForget(${i})"/>
+        기억 안남
+      </label>`;
+    container.appendChild(row);
+  }
+}
+
+function today() {
+  return new Date().toISOString().split('T')[0];
+}
+
+
+/* ============================================================
+   ★ "기억 안남" 체크박스 처리
+   ============================================================ */
+function toggleForget(i) {
+  const cb    = document.getElementById(`forget${i}`);
+  const input = document.getElementById(`date${i}`);
+  const row   = document.getElementById(`row${i}`);
+  if (cb.checked) {
+    input.value = '';
+    input.disabled = true;
+    row.classList.add('disabled');
+  } else {
+    input.disabled = false;
+    row.classList.remove('disabled');
+  }
+}
+
+function onDateChange() { /* 입력 변경 시 훅 – 향후 실시간 계산 확장 가능 */ }
+
+
+/* ============================================================
+   ★ 전염병 선택 버튼 처리
+   ============================================================ */
+document.getElementById('diseaseGrid').addEventListener('click', e => {
+  const btn = e.target.closest('.disease-btn');
+  if (!btn) return;
+
+  // 모든 버튼 비활성화 후 클릭된 것만 활성화
+  document.querySelectorAll('.disease-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  // 선택된 전염병 데이터 저장
+  selectedDisease = {
+    id:           btn.dataset.id,
+    name:         btn.dataset.name,
+    immunityDays: parseInt(btn.dataset.immunityDays),
+    avgInterval:  parseInt(btn.dataset.avgInterval),
+    peakRisk:     parseFloat(btn.dataset.peakRisk)
+  };
+
+  // 이미 결과가 열려있으면 재계산
+  if (document.getElementById('results').style.display !== 'none') analyze();
+});
+
+
+/* ============================================================
+   ★ 날짜 수집 헬퍼
+   ============================================================ */
+function getValidDates() {
+  const dates = [];
+  for (let i = 1; i <= 5; i++) {
+    const cb  = document.getElementById(`forget${i}`);
+    const val = document.getElementById(`date${i}`).value;
+    if (!cb.checked && val) {
+      dates.push(new Date(val));
+    }
+  }
+  // 오래된 것 → 최신 순 정렬
+  return dates.sort((a, b) => b - a);
+}
+
+
+/* ============================================================
+   ★ 핵심 계산 함수: calculateResults()
+   - 입력된 날짜 기반으로 면역력 지수와 감염 확률 계산
+   ============================================================ */
+function calculateResults(dates) {
+  const now      = new Date();
+  const iDays    = selectedDisease.immunityDays;
+  const peakRisk = selectedDisease.peakRisk;
+  const avgInt   = selectedDisease.avgInterval;
+
+  // 날짜 없을 때 기본값
+  if (dates.length === 0) {
+    return {
+      immunityIndex: 30,           // %
+      riskPct:       peakRisk * 100,
+      nextRiskDate:  null,
+      daysSinceLast: null,
+      totalCount:    0,
+      avgDaysBetween:null,
+      prediction:    '데이터 부족'
+    };
+  }
+
+  const lastDate       = dates[0];                          // 가장 최근 감염일
+  const daysSinceLast  = Math.round((now - lastDate) / 864e5); // 마지막 감염 후 경과일
+
+  /* ── 면역력 곡선 (수식 설명) ──────────────────────────────
+     감염 직후 면역력이 빠르게 최고점(95%)에 도달하고
+     이후 지수 감소: immunity = 95 * exp(-k * daysSinceLast)
+     k = ln(2) / halfLife  (halfLife = immunityDays * 0.7)
+     면역이 완전히 소실되면 기저 수준(15%)으로 수렴
+  ─────────────────────────────────────────────────────── */
+  const halfLife   = iDays * 0.7;
+  const k          = Math.LN2 / halfLife;
+  const rawImmunity = 95 * Math.exp(-k * daysSinceLast);
+  const immunityIndex = Math.max(15, Math.round(rawImmunity));
+
+  /* ── 감염 위험도 계산 ────────────────────────────────────
+     위험도 = peakRisk * (1 - 면역지수/100)^1.5
+     + 실시간 유행률 보정 (liveWeeklyRate 있을 때)
+  ─────────────────────────────────────────────────────── */
+  const riskFactor = Math.pow(1 - immunityIndex / 100, 1.5);
+  let riskPct      = peakRisk * 100 * riskFactor;
+
+  // ★ 실시간 유행 데이터 반영: 유행률이 높을수록 위험도 추가
+  if (liveWeeklyRate !== null) {
+    // weeklyRate(10만명당 발생)를 0~20% 범위로 정규화해서 가산
+    const liveBonus = Math.min(20, liveWeeklyRate / 5);
+    riskPct += liveBonus;
+  }
+
+  // 과거 감염 빈도 보정 (많이 걸릴수록 개인 위험도 +)
+  const freqBonus = Math.min(20, (dates.length - 1) * 4);
+  riskPct = Math.min(95, riskPct + freqBonus);
+
+  /* ── 평균 감염 간격 ──────────────────────────────────── */
+  let avgDaysBetween = null;
+  if (dates.length >= 2) {
+    let total = 0;
+    for (let i = 0; i < dates.length - 1; i++) {
+      total += Math.abs(dates[i] - dates[i + 1]) / 864e5;
+    }
+    avgDaysBetween = Math.round(total / (dates.length - 1));
+  }
+
+  /* ── 다음 위험 시기 예측 ─────────────────────────────── */
+  const daysToRisk  = Math.max(0, iDays - daysSinceLast);
+  const nextRiskDate = new Date(now);
+  nextRiskDate.setDate(nextRiskDate.getDate() + daysToRisk);
+
+  /* ── 예측 메시지 ──────────────────────────────────────── */
+  let prediction;
+  if (daysToRisk <= 0) prediction = '현재 면역 보호 약화 — 주의 필요';
+  else if (daysToRisk < 30) prediction = `약 ${daysToRisk}일 후 면역 보호 감소 예상`;
+  else prediction = `${Math.round(daysToRisk / 30)}개월 후 면역 보호 감소 예상`;
+
+  return {
+    immunityIndex,
+    riskPct:        Math.round(riskPct),
+    nextRiskDate,
+    daysSinceLast,
+    totalCount:     dates.length,
+    avgDaysBetween,
+    prediction
+  };
+}
+
+
+/* ============================================================
+   ★ 실시간 유행 데이터 가져오기: fetchLiveData()
+   - Cloudflare Worker를 통해 WHO/CDC 데이터 호출
+   ============================================================ */
+async function fetchLiveData(diseaseId) {
+  try {
+    const res  = await fetch(`${WORKER_URL}?disease=${diseaseId}`);
+    const data = await res.json();
+    return data.weeklyRate ?? null;
+  } catch (e) {
+    console.warn('실시간 데이터 로드 실패, 기본값 사용:', e);
+    return null;
+  }
+}
+
+
+/* ============================================================
+   ★ 분석 실행: analyze()
+   - 버튼 클릭 시 호출되는 메인 함수
+   ============================================================ */
+async function analyze() {
+  const btn = document.getElementById('btnAnalyze');
+  btn.innerHTML = '<span class="spinner"></span><span>실시간 데이터 불러오는 중...</span>';
+  btn.disabled = true;
+
+  // 실시간 유행 데이터 fetch
+  liveWeeklyRate = await fetchLiveData(selectedDisease.id);
+
+  const dates  = getValidDates();
+  const result = calculateResults(dates);
+
+  renderStats(result, dates);
+  renderRiskBar(result);
+  renderChart(dates, result);
+  renderTimeline(dates, result);
+  renderGauge(result.immunityIndex);
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  btn.innerHTML = '<span>📊 면역력 분석하기</span>';
+  btn.disabled = false;
+}
+
+
+/* ============================================================
+   ★ 핵심 지표 카드 렌더링: renderStats()
+   ============================================================ */
+function renderStats(r, dates) {
+  const grid = document.getElementById('statGrid');
+  const fmtDate = d => d ? d.toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) : '—';
+
+  grid.innerHTML = `
+    <div class="stat-box blue">
+      <div class="stat-label">선택 전염병</div>
+      <div class="stat-value blue" style="font-size:1rem;margin-top:6px;">${selectedDisease.name}</div>
+      <div class="stat-sub">면역 지속: 약 ${selectedDisease.immunityDays}일${liveWeeklyRate !== null ? ' · <span style="color:var(--green)">🟢 실시간 데이터 반영</span>' : ' · ⚪ 기본값 사용'}</div>
+    </div>
+    <div class="stat-box ${r.immunityIndex >= 60 ? 'green' : r.immunityIndex >= 35 ? 'amber' : 'red'}">
+      <div class="stat-label">현재 면역력 지수</div>
+      <div class="stat-value ${r.immunityIndex >= 60 ? 'green' : r.immunityIndex >= 35 ? 'amber' : 'red'}">${r.immunityIndex}%</div>
+      <div class="stat-sub">${r.immunityIndex >= 60 ? '양호' : r.immunityIndex >= 35 ? '주의' : '위험'}</div>
+    </div>
+    <div class="stat-box ${r.riskPct < 30 ? 'green' : r.riskPct < 60 ? 'amber' : 'red'}">
+      <div class="stat-label">감염 위험도</div>
+      <div class="stat-value ${r.riskPct < 30 ? 'green' : r.riskPct < 60 ? 'amber' : 'red'}">${r.riskPct}%</div>
+      <div class="stat-sub">${r.riskPct < 30 ? '낮음' : r.riskPct < 60 ? '보통' : '높음'}</div>
+    </div>
+    <div class="stat-box blue">
+      <div class="stat-label">총 감염 횟수</div>
+      <div class="stat-value blue">${r.totalCount}회</div>
+      <div class="stat-sub">${r.avgDaysBetween ? `평균 ${r.avgDaysBetween}일 간격` : '기록 1건'}</div>
+    </div>
+    <div class="stat-box amber">
+      <div class="stat-label">마지막 감염 후</div>
+      <div class="stat-value amber">${r.daysSinceLast !== null ? r.daysSinceLast + '일' : '—'}</div>
+      <div class="stat-sub">${dates.length ? fmtDate(dates[0]) + ' 이후' : '입력 없음'}</div>
+    </div>
+    <div class="stat-box ${r.nextRiskDate && r.nextRiskDate <= new Date() ? 'red' : 'green'}">
+      <div class="stat-label">면역 감소 예상일</div>
+      <div class="stat-value ${r.nextRiskDate && r.nextRiskDate <= new Date() ? 'red' : 'green'}" style="font-size:1rem;margin-top:4px;">
+        ${r.nextRiskDate ? fmtDate(r.nextRiskDate) : '—'}
+      </div>
+      <div class="stat-sub">${r.prediction}</div>
+    </div>`;
+}
+
+
+/* ============================================================
+   ★ 위험도 바 렌더링: renderRiskBar()
+   ============================================================ */
+function renderRiskBar(r) {
+  const pct  = r.riskPct;
+  const fill = document.getElementById('riskBarFill');
+  const msg  = document.getElementById('riskMsg');
+  document.getElementById('riskPct').textContent = pct + '%';
+
+  let color, bgColor, text;
+  if (pct < 20) {
+    color = '#2e7d32'; bgColor = '#e8f5e9';
+    text = '✅ 현재 면역력이 충분합니다. 일상적인 위생 관리로 유지하세요.';
+  } else if (pct < 40) {
+    color = '#1a73e8'; bgColor = '#e8f0fe';
+    text = '🔵 면역력이 적당한 수준입니다. 규칙적인 운동과 수면을 권장합니다.';
+  } else if (pct < 65) {
+    color = '#e65100'; bgColor = '#fff3e0';
+    text = '⚠️ 감염 주의 단계입니다. 사람 많은 곳은 마스크 착용을 고려하세요.';
+  } else {
+    color = '#c62828'; bgColor = '#ffebee';
+    text = '🚨 감염 위험이 높습니다. 백신 접종 및 의사 상담을 강력 권장합니다.';
+  }
+
+  fill.style.width = pct + '%';
+  fill.style.background = color;
+  msg.style.background = bgColor;
+  msg.style.color = color;
+  msg.textContent = text;
+}
+
+
+/* ============================================================
+   ★ 면역력 그래프 렌더링: renderChart()
+   - Chart.js 라이브러리 활용
+   - x축: 마지막 감염 후 경과일, y축: 면역력 지수(%)
+   ============================================================ */
+function renderChart(dates, result) {
+  const iDays    = selectedDisease.immunityDays;
+  const halfLife = iDays * 0.7;
+  const k        = Math.LN2 / halfLife;
+
+  // 그래프 데이터 포인트 생성 (0 ~ 2배 면역 지속일)
+  const maxDay   = iDays * 2;
+  const labels   = [];
+  const immunity = [];
+
+  for (let d = 0; d <= maxDay; d += Math.max(1, Math.round(maxDay / 100))) {
+    labels.push(d);
+    const val = Math.max(15, Math.round(95 * Math.exp(-k * d)));
+    immunity.push(val);
+  }
+
+  // 현재 위치 마커
+  const currentDay  = result.daysSinceLast ?? 0;
+  const currentImm  = result.immunityIndex;
+
+  // 기존 차트 제거
+  if (immunityChartInstance) { immunityChartInstance.destroy(); }
+
+  const ctx = document.getElementById('immunityChart').getContext('2d');
+
+  // 그라데이션 배경
+  const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+  gradient.addColorStop(0, 'rgba(26,115,232,.25)');
+  gradient.addColorStop(1, 'rgba(26,115,232,.02)');
+
+  immunityChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: '면역력 지수 (%)',
+          data: immunity,
+          borderColor: '#1a73e8',
+          backgroundColor: gradient,
+          borderWidth: 2.5,
+          pointRadius: 0,
+          fill: true,
+          tension: 0.4
+        },
+        {
+          // 위험 임계선 (40%)
+          label: '재감염 위험 임계선',
+          data: labels.map(() => 40),
+          borderColor: '#c62828',
+          borderWidth: 1.5,
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false,
+          tension: 0
+        },
+        {
+          // 현재 위치 마커
+          label: '현재 상태',
+          data: labels.map(d => (Math.abs(d - currentDay) < (maxDay / 100) * 1.5 ? currentImm : null)),
+          borderColor: '#e65100',
+          backgroundColor: '#e65100',
+          pointRadius: labels.map(d => (Math.abs(d - currentDay) < (maxDay / 100) * 1.5 ? 8 : 0)),
+          pointStyle: 'circle',
+          fill: false,
+          showLine: false,
+          spanGaps: false
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { font: { family: 'Noto Sans KR', size: 11 }, boxWidth: 12, padding: 14 }
+        },
+        tooltip: {
+          callbacks: {
+            title: ctx => `감염 후 ${ctx[0].label}일`,
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y ?? ''}%`
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: {
+            display: true, text: '감염 후 경과일 (일)',
+            font: { family: 'Noto Sans KR', size: 11 }, color: '#8a96a8'
+          },
+          ticks: { font: { family: 'Noto Sans KR', size: 10 }, color: '#8a96a8',
+                   callback: v => labels[v] !== undefined && labels[v] % Math.round(iDays/3) < Math.max(1, Math.round(maxDay/100)) ? labels[v] + 'd' : '' },
+          grid: { color: '#eef0f4' }
+        },
+        y: {
+          min: 0, max: 100,
+          title: {
+            display: true, text: '면역력 지수 (%)',
+            font: { family: 'Noto Sans KR', size: 11 }, color: '#8a96a8'
+          },
+          ticks: { font: { family: 'Noto Sans KR', size: 10 }, color: '#8a96a8',
+                   callback: v => v + '%' },
+          grid: { color: '#eef0f4' }
+        }
+      }
+    }
+  });
+}
+
+
+/* ============================================================
+   ★ 타임라인 렌더링: renderTimeline()
+   ============================================================ */
+function renderTimeline(dates, result) {
+  const tl = document.getElementById('timeline');
+  const fmt = d => d.toLocaleDateString('ko-KR', { year:'numeric', month:'short', day:'numeric' });
+  const now = new Date();
+
+  let items = [];
+
+  // 각 감염 이벤트
+  dates.forEach((d, i) => {
+    items.push({
+      date: d,
+      dot: 'red',
+      title: `${i + 1}번째 ${selectedDisease.name} 감염`,
+      desc: `감염 발생 — 면역력이 최고점(약 95%)까지 상승`
+    });
+    // 면역 최고점 (~7일 후)
+    const peak = new Date(d); peak.setDate(peak.getDate() + 7);
+    if (peak <= now) {
+      items.push({
+        date: peak, dot: 'green',
+        title: '면역력 최고점',
+        desc: `감염 후 7일 — 항체 최대 생성, 면역력 정점`
+      });
+    }
+  });
+
+  // 현재
+  items.push({ date: now, dot: 'blue', title: '현재', desc: `면역력 지수 약 ${result.immunityIndex}% — ${result.immunityIndex >= 60 ? '양호' : result.immunityIndex >= 35 ? '주의 필요' : '위험 수준'}` });
+
+  // 다음 위험 예측
+  if (result.nextRiskDate && result.nextRiskDate > now) {
+    items.push({
+      date: result.nextRiskDate, dot: 'amber',
+      title: '면역 보호 감소 예상일',
+      desc: `이 시점부터 재감염 위험이 높아집니다. 예방 수칙 강화 권장`
+    });
+  }
+
+  // 날짜순 정렬
+  items.sort((a, b) => a.date - b.date);
+
+  tl.innerHTML = items.map(it => `
+    <div class="tl-item">
+      <div class="tl-dot ${it.dot}"></div>
+      <div class="tl-date">${it.date.toLocaleDateString('ko-KR', {month:'short', day:'numeric'})}</div>
+      <div class="tl-desc"><strong>${it.title}</strong><br>${it.desc}</div>
+    </div>`).join('');
+}
+
+
+/* ============================================================
+   ★ 면역력 게이지(반원) 렌더링: renderGauge()
+   ============================================================ */
+function renderGauge(pct) {
+  const circumference = Math.PI * 80; // 반원 호 길이 ≈ 251.3
+  const offset = circumference * (1 - pct / 100);
+  const fill   = document.getElementById('gaugeFill');
+  const val    = document.getElementById('gaugeValue');
+
+  setTimeout(() => {
+    fill.style.strokeDashoffset = offset;
+  }, 100);
+
+  let n = 0;
+  const timer = setInterval(() => {
+    n = Math.min(n + 2, pct);
+    val.textContent = n + '%';
+    if (n >= pct) clearInterval(timer);
+  }, 20);
+}
+
+
+/* ============================================================
+   ★ 앱 시작
+   ============================================================ */
+buildDateRows();
+</script>
+</body>
+</html>
